@@ -1,0 +1,25 @@
+# Django web framework
+Django>=5.0.0
+
+# LangChain core + integrations
+langchain>=0.2.0
+langchain-community>=0.2.0
+langchain-openai>=0.1.0
+
+# OpenAI client
+openai>=1.30.0
+
+# Vector database for embeddings
+faiss-cpu>=1.7.4
+
+# Document loaders (DOCX, TXT)
+python-docx>=1.1.0
+docx2txt>=0.8
+
+# Environment variables
+python-dotenv>=1.0.1
+
+#jupyter notebook kernel
+ipykernel
+
+-e .
