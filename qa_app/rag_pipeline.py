@@ -8,19 +8,19 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain.vectorstores import FAISS
 from langchain.prompts import ChatPromptTemplate
-from langchain.chains import create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain.chains import ConversationalRetrievalChain
+from langchain.memory import ConversationBufferMemory
 
-load_dotenv()  # load your .env with OPENAI_API_KEY
+load_dotenv()  # Load OPENAI_API_KEY
 
 
-# 1. Load documents (DOCX here, you can add PDF/TXT too)
+# 1. Load documents
 def load_documents(filepath: str) -> List[Document]:
     loader = Docx2txtLoader(filepath)
     return loader.load()
 
 
-# 2. Filter documents (keep only page_content + source metadata)
+# 2. Filter metadata
 def filter_documents(docs: List[Document]) -> List[Document]:
     filtered_docs: List[Document] = []
     for doc in docs:
@@ -34,46 +34,48 @@ def filter_documents(docs: List[Document]) -> List[Document]:
     return filtered_docs
 
 
-# 3. Split text into chunks
+# 3. Split into chunks
 def text_split(docs: List[Document]):
     splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
     return splitter.split_documents(docs)
 
 
-# 4. Build VectorStore + Retriever
+# 4. Build vectorstore
 def build_vectorstore(chunks):
     embeddings = OpenAIEmbeddings()
     vector_store = FAISS.from_documents(chunks, embeddings)
+    return vector_store
+
+
+# 5. Build Conversational Retrieval QA Chain with memory
+def build_conversational_chain(vector_store):
     retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 5})
-    return retriever
 
+    memory = ConversationBufferMemory(
+        memory_key="chat_history",
+        return_messages=True
+    )
 
-# 5. Create the QA Chain
-def build_qa_chain(retriever):
-    system_prompt = """
-    You are a helpful assistant.
-    You must only answer from the given text.
-    If you don't have sufficient context, just say "I don't know".
-    {context}\n
-    """
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system_prompt),
-        ("human", "{input}")
-    ])
+    llm = ChatOpenAI()
 
-    model = ChatOpenAI()
-    question_answer_chain = create_stuff_documents_chain(model, prompt)
-    rag_chain = create_retrieval_chain(retriever, question_answer_chain)
-    return rag_chain
+    # ConversationalRetrievalChain
+    qa_chain = ConversationalRetrievalChain.from_llm(
+        llm=llm,
+        retriever=retriever,
+        memory=memory,
+        verbose=True
+    )
+    return qa_chain
 
 
 # 6. Full pipeline function
-def run_rag(filepath: str, query: str):
-    docs = load_documents(filepath)
-    filtered = filter_documents(docs)
-    chunks = text_split(filtered)
-    retriever = build_vectorstore(chunks)
-    rag_chain = build_qa_chain(retriever)
+def run_rag(filepath: str, query: str, chain=None):
+    if chain is None:
+        docs = load_documents(filepath)
+        filtered = filter_documents(docs)
+        chunks = text_split(filtered)
+        vector_store = build_vectorstore(chunks)
+        chain = build_conversational_chain(vector_store)
 
-    response = rag_chain.invoke({"input": query})
-    return response["answer"]
+    response = chain({"question": query})
+    return response["answer"], chain
