@@ -22,4 +22,4 @@ python-dotenv>=1.0.1
 #jupyter notebook kernel
 ipykernel
 
--e .
+# -e .
